@@ -334,9 +334,9 @@ FASTAPI_URL = "http://13.51.48.170:8000/predict"  # 🔧 Change host/port if nee
 def classify_image(image: Image.Image, filename: str = "image.jpg"):
     """
     Sends the image to the FastAPI /predict endpoint and returns
-    a list of (label, confidence) tuples sorted by confidence descending.
+    a dict with 'class_name', 'prediction' (index), and optional 'confidence'.
+    API response format: {"prediction": 3, "class_name": "Tomato___Bacterial_spot"}
     """
-    # Convert PIL image to bytes
     buf = io.BytesIO()
     image.save(buf, format="JPEG")
     buf.seek(0)
@@ -350,27 +350,29 @@ def classify_image(image: Image.Image, filename: str = "image.jpg"):
         response.raise_for_status()
         data = response.json()
 
-        # ── Handle response format ─────────────────────────────────────────────
-        # Case 1: {"prediction": 3}  →  single integer class index
-        if "prediction" in data and isinstance(data["prediction"], (int, str)):
-            label = str(data["prediction"])
-            return [(label, 1.0)]
+        # Primary format: {"prediction": 3, "class_name": "Tomato___Bacterial_spot"}
+        if "class_name" in data:
+            raw = data["class_name"]
+            # Clean up underscores/triple-underscores e.g. "Tomato___Bacterial_spot"
+            # → "Tomato — Bacterial Spot"
+            parts = raw.replace("___", "|||").replace("_", " ").split("|||")
+            if len(parts) == 2:
+                display = f"{parts[0].strip().title()} — {parts[1].strip().title()}"
+            else:
+                display = raw.replace("_", " ").title()
+            return {
+                "class_name": display,
+                "raw_class": raw,
+                "prediction_index": data.get("prediction"),
+                "confidence": data.get("confidence"),   # None if not returned
+            }
 
-        # Case 2: {"prediction": "Golden Retriever"}  →  single string label
-        if "prediction" in data and isinstance(data["prediction"], str):
-            return [(data["prediction"], 1.0)]
+        # Fallback: just a prediction string
+        if "prediction" in data:
+            val = str(data["prediction"]).replace("_", " ").title()
+            return {"class_name": val, "raw_class": val, "prediction_index": None, "confidence": None}
 
-        # Case 3: {"predictions": [{"label": "...", "confidence": 0.87}, ...]}
-        if "predictions" in data:
-            return [(p["prediction"], p["class_name"]) for p in data["predictions"]]
-
-        # Case 4: {"prediction": {"label": "...", "confidence": 0.87}}
-        if "prediction" in data and isinstance(data["prediction"], dict):
-            p = data["prediction"]
-            return [(p.get("label", "Unknown"), p.get("confidence", 1.0))]
-
-        # Fallback: return raw response as label
-        return [(str(data), 1.0)]
+        return {"class_name": str(data), "raw_class": str(data), "prediction_index": None, "confidence": None}
 
     except requests.exceptions.ConnectionError:
         st.error("⚠️ Could not connect to the FastAPI server. Is it running?")
@@ -426,35 +428,56 @@ if uploaded is not None:
     # Classify button
     if st.button("◈  Classify Image", use_container_width=True):
         with st.spinner("Analysing..."):
-            predictions = classify_image(image, filename=uploaded.name)
+            result = classify_image(image, filename=uploaded.name)
 
-        top_label, top_conf = predictions[0]
-        conf_pct = top_conf * 100
+        class_name   = result["class_name"]
+        pred_index   = result["prediction_index"]
+        confidence   = result["confidence"]
 
-        # Build confidence bar rows
-        bars_html = ""
-        for label, conf in predictions:
-            pct = conf * 100
-            bars_html += f"""
-            <div class="pred-row">
-                <span class="pred-label">{label}</span>
+        # Split display name into plant + condition for styled rendering
+        if " — " in class_name:
+            plant_part, condition_part = class_name.split(" — ", 1)
+        else:
+            plant_part, condition_part = class_name, ""
+
+        # Confidence block — only show if the API returned it
+        if confidence is not None:
+            conf_pct = confidence * 100 if confidence <= 1.0 else confidence
+            conf_html = f"""
+            <div class="pred-row" style="margin-top:1.4rem;">
+                <span class="pred-label" style="color:#8a8070;font-size:0.7rem">Confidence</span>
                 <div class="pred-bar-bg">
-                    <div class="pred-bar-fill" style="width:{pct:.1f}%"></div>
+                    <div class="pred-bar-fill" style="width:{conf_pct:.1f}%"></div>
                 </div>
-                <span class="pred-pct">{pct:.1f}%</span>
+                <span class="pred-pct">{conf_pct:.1f}%</span>
             </div>"""
+            conf_meta_html = f"""
+            <div class="meta-item">
+                <span class="meta-key">Confidence</span>
+                <span class="meta-val">{conf_pct:.2f}%</span>
+            </div>"""
+        else:
+            conf_html      = ""
+            conf_meta_html = ""
+
+        # Class index pill — only show if returned
+        index_pill = ""
+        if pred_index is not None:
+            index_pill = f'<span style="font-family:\'DM Mono\',monospace;font-size:0.62rem;color:#5a5448;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:4px;padding:2px 8px;margin-left:0.6rem;">class {pred_index}</span>'
+
+        condition_block = f'<div style="font-family:\'DM Mono\',monospace;font-size:0.78rem;color:#b49450;letter-spacing:0.08em;margin-top:0.3rem;">{condition_part}</div>' if condition_part else ""
 
         # Render results panel
         st.markdown(f"""
         <div class="results-panel">
-            <div class="result-header">Classification Results</div>
+            <div class="result-header">Classification Result {index_pill}</div>
 
-            <div class="top-prediction">
-                <span class="top-label">{top_label}</span>
-                <span class="top-confidence">{conf_pct:.1f}%</span>
+            <div class="top-prediction" style="flex-direction:column;align-items:flex-start;gap:0.3rem;margin-bottom:1.4rem;">
+                <span class="top-label">{plant_part}</span>
+                {condition_block}
             </div>
 
-            {bars_html}
+            {conf_html}
 
             <div class="meta-strip">
                 <div class="meta-item">
@@ -469,10 +492,7 @@ if uploaded is not None:
                     <span class="meta-key">Colour Space</span>
                     <span class="meta-val">{meta['mode']}</span>
                 </div>
-                <div class="meta-item">
-                    <span class="meta-key">Top-1 Confidence</span>
-                    <span class="meta-val">{conf_pct:.2f}%</span>
-                </div>
+                {conf_meta_html}
             </div>
         </div>
         """, unsafe_allow_html=True)
