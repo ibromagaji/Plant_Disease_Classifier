@@ -329,7 +329,7 @@ h1, h2, h3, h4 { font-family: 'Cormorant Garamond', serif !important; }
 
 
 # ── FastAPI endpoint config ────────────────────────────────────────────────────
-FASTAPI_URL = "http://51.20.63.231:8000/predict"  # 🔧 Change host/port if needed
+FASTAPI_URL = "http://13.51.48.170:8000/predict"  # 🔧 Change host/port if needed
 
 
 def classify_image(image: Image.Image, filename: str = "image.jpg"):
