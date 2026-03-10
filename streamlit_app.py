@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
 from PIL import Image
 import time
@@ -328,7 +329,7 @@ h1, h2, h3, h4 { font-family: 'Cormorant Garamond', serif !important; }
 
 
 # ── FastAPI endpoint config ────────────────────────────────────────────────────
-FASTAPI_URL = "http://13.51.48.170:8000/predict"  # 🔧 Change host/port if needed
+FASTAPI_URL = "http://51.20.63.231:8000/predict"  # 🔧 Change host/port if needed
 
 
 def classify_image(image: Image.Image, filename: str = "image.jpg"):
@@ -467,14 +468,130 @@ if uploaded is not None:
 
         condition_block = f'<div style="font-family:\'DM Mono\',monospace;font-size:0.78rem;color:#b49450;letter-spacing:0.08em;margin-top:0.3rem;">{condition_part}</div>' if condition_part else ""
 
-        # Render results panel
-        st.markdown(f"""
+        # Render results panel — use components.html for guaranteed HTML rendering
+        results_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Mono:wght@300;400&family=Outfit:wght@200;300;400&display=swap" rel="stylesheet">
+        <style>
+        * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+        body {{ background: transparent; color: #e8e0d0; font-family: 'Outfit', sans-serif; font-weight: 300; }}
+        .results-panel {{
+            background: rgba(255,255,255,0.022);
+            border: 1px solid rgba(255,255,255,0.07);
+            border-radius: 20px;
+            padding: 2.2rem 2.4rem;
+            backdrop-filter: blur(12px);
+            position: relative;
+            overflow: hidden;
+        }}
+        .results-panel::before {{
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(180,148,80,0.4), transparent);
+        }}
+        .result-header {{
+            font-family: 'DM Mono', monospace;
+            font-size: 0.6rem;
+            letter-spacing: 0.25em;
+            color: #6a6058;
+            text-transform: uppercase;
+            margin-bottom: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }}
+        .index-pill {{
+            font-family: 'DM Mono', monospace;
+            font-size: 0.62rem;
+            color: #5a5448;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 4px;
+            padding: 2px 8px;
+        }}
+        .plant-name {{
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.6rem;
+            font-weight: 400;
+            color: #f0e8d8;
+            line-height: 1.1;
+        }}
+        .disease-name {{
+            font-family: 'DM Mono', monospace;
+            font-size: 0.78rem;
+            color: #b49450;
+            letter-spacing: 0.08em;
+            margin-top: 0.35rem;
+        }}
+        .pred-row {{
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 1.4rem;
+        }}
+        .pred-label {{
+            font-size: 0.7rem;
+            color: #8a8070;
+            width: 100px;
+            flex-shrink: 0;
+        }}
+        .pred-bar-bg {{
+            flex: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.06);
+            border-radius: 2px;
+            overflow: hidden;
+        }}
+        .pred-bar-fill {{
+            height: 100%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, #b49450, #e8c87a);
+        }}
+        .pred-pct {{
+            font-family: 'DM Mono', monospace;
+            font-size: 0.68rem;
+            color: #7a7060;
+            width: 42px;
+            text-align: right;
+            flex-shrink: 0;
+        }}
+        .meta-strip {{
+            display: flex;
+            gap: 2rem;
+            margin-top: 2rem;
+            padding-top: 1.4rem;
+            border-top: 1px solid rgba(255,255,255,0.06);
+            flex-wrap: wrap;
+        }}
+        .meta-item {{ display: flex; flex-direction: column; gap: 0.2rem; }}
+        .meta-key {{
+            font-family: 'DM Mono', monospace;
+            font-size: 0.58rem;
+            letter-spacing: 0.2em;
+            color: #5a5448;
+            text-transform: uppercase;
+        }}
+        .meta-val {{
+            font-size: 0.82rem;
+            color: #a09080;
+            font-weight: 300;
+        }}
+        </style>
+        </head>
+        <body>
         <div class="results-panel">
-            <div class="result-header">Classification Result {index_pill}</div>
+            <div class="result-header">
+                Classification Result
+                {'<span class="index-pill">class ' + str(pred_index) + '</span>' if pred_index is not None else ''}
+            </div>
 
-            <div class="top-prediction" style="flex-direction:column;align-items:flex-start;gap:0.3rem;margin-bottom:1.4rem;">
-                <span class="top-label">{plant_part}</span>
-                {condition_block}
+            <div style="margin-bottom:1.4rem;">
+                <div class="plant-name">{plant_part}</div>
+                {'<div class="disease-name">' + condition_part + '</div>' if condition_part else ''}
             </div>
 
             {conf_html}
@@ -495,7 +612,10 @@ if uploaded is not None:
                 {conf_meta_html}
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        </body>
+        </html>
+        """
+        components.html(results_html, height=320, scrolling=False)
 
 else:
     # Empty-state hint
